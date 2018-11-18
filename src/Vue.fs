@@ -5,7 +5,7 @@ open Fable.Import
 open Fable.Core.JsInterop
 
 [<Import("default", from="vue/dist/vue.esm.js")>]
-let Vue: obj = jsNative
+let private Vue: obj = jsNative
 
 [<AbstractClass>]
 type VueExtra<'Model>(category, key, value) =
@@ -19,20 +19,21 @@ type IVueComponent =
 type VueComputed<'T, 'Model>(name: string, compute: 'Model->'T) =
     inherit VueExtra<'Model>("computed", name, compute)
 
-type VueComponents<'T>(values: seq<string * IVueComponent>) = 
+type VueComponents<'T>(values: seq<string * IVueComponent>) =
     inherit VueExtra<'T>("components", "values", values)
 
-type VueTemplate<'T>(template: string) = 
-    inherit VueExtra<'T>("template", "template", template) 
-let computed name (compute: 'Model -> 'T) = 
+type VueTemplate<'T>(template: string) =
+    inherit VueExtra<'T>("template", "template", template)
+
+let computed name (compute: 'Model -> 'T) =
     VueComputed(name, compute)
 
-let components (values: seq<string * IVueComponent>) = 
+let components (values: seq<string * IVueComponent>) =
     VueComponents<'T>(values)
 
-let template (content: string) = 
+let template (content: string) =
     VueTemplate<'T>(content)
-     
+
 module internal Internal =
     open System
     open FSharp.Reflection
@@ -69,7 +70,7 @@ module internal Internal =
                 FSharpValue.MakeUnion(msgCase, values))
 
         let computed = obj()
-        let childComponents = obj() 
+        let childComponents = obj()
 
         let mutable template = "<template></template>"
 
@@ -84,8 +85,8 @@ module internal Internal =
             if kv.Category = "components" then
                 for (name, child) in unbox<seq<string * IVueComponent>> kv.Value do
                     childComponents?(name) <- child
-        
-        // TODO: Mark all record fields as props or let/make user select them?
+
+        // TODO: props
         createObj [
             "data" ==> init
             "methods" ==> methodsObj
@@ -100,14 +101,30 @@ let inline componentBuilder<'Model, 'Msg>
                 (extra: VueExtra<'Model> seq) =
     Internal.mkComponent typeof<'Model> typeof<'Msg> init update extra
 
-
 let registerComponent (name: string) (component': IVueComponent): unit =
     Vue?``component``(name, component')
 
-let mountApp (elSelector: string) (app: IVueComponent): unit =
+let mountApp (elSelector: string) (extra: VueExtra<'Model> seq): unit =
+    let childComponents = obj()
+    let mutable template = "<template></template>"
+
+    for kv in extra do
+        if kv.Category = "template" then
+            template <- unbox<string> kv.Value
+
+        if kv.Category = "components" then
+            for (name, child) in unbox<seq<string * IVueComponent>> kv.Value do
+                childComponents?(name) <- child
+
+    let app = createObj [
+        "name" ==> "App"
+        "template" ==> template
+        "components" ==> childComponents
+    ]
+
     let props = createObj [
         "el" ==> elSelector
         "render" ==> fun create -> create app
     ]
-    
+
     createNew Vue props |> ignore
