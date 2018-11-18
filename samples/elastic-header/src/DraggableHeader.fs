@@ -8,6 +8,9 @@ let [<Global>] dynamics: obj = jsNative
 
 type Point = { x: float; y: float }
 
+type Props =
+    { title: string }
+
 type Model =
     { dragging: bool
       current: Point
@@ -30,9 +33,9 @@ let getPage (e: Browser.MouseEvent) =
 type Msg =
     | StartDrag of Browser.MouseEvent
     | OnDrag of Browser.MouseEvent
-    | StopDrag of Browser.MouseEvent
+    | StopDrag
 
-let update state = function
+let update _vue (_props: Props) state = function
     | StartDrag e ->
         { state with dragging = true
                      start = getPage e }
@@ -42,17 +45,17 @@ let update state = function
         let x = 160. + (page.x - start.x)
         // dampen vertical drag by a factor
         let dy = page.y - start.y
-        let dampen = if dy > 0. then 0.5 else 4.
+        let dampen = if dy > 0. then 1.5 else 4.
         let y = 160. + dy / dampen
         { state with current = { x = x; y = y } }
-    | StopDrag _ when state.dragging ->
+    | StopDrag when state.dragging ->
         dynamics?animate(state.current, {x=160.; y=160.}, createObj [
                 "type" ==> dynamics?spring
                 "duration" ==> 700
                 "friction" ==> 280
             ])
         { state with dragging = false }
-    | _ -> state
+    | OnDrag _ | StopDrag -> state
 
 let headerPath model =
     "M0,0 L320,0 320,160Q" + string model.current.x + "," + string model.current.y + " 0,160"
