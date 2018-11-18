@@ -45,7 +45,7 @@ let update state = function
         let x = 160. + (page.x - start.x)
         // dampen vertical drag by a factor
         let dy = page.y - start.y
-        let dampen = if dy > 0. then 0.5 else 4.
+        let dampen = if dy > 0. then 1.5 else 4.
         let y = 160. + dy / dampen
         { state with c = { x=x; y=y } }
     | StopDrag _ when state.dragging ->

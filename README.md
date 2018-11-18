@@ -7,3 +7,5 @@ The idea is not to create a clone of Elmish/Fable.React that can be used with a 
 ## Quick test
 
 Run `npm i` to install dependencies, then `npm start` to compile the elastic-header sample. Then browse to `localhost:8080`.
+
+![gif](img/vue.gif)
