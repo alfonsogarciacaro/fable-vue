@@ -5,7 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Fable.Vue.fs" />
+    <Compile Include="Vue.fs" />
   </ItemGroup>
 
   <ItemGroup>

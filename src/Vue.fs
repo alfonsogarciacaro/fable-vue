@@ -1,4 +1,4 @@
-module Fable.Vue
+module Vue
 
 open Fable.Core
 open Fable.Import
@@ -13,12 +13,26 @@ type VueExtra<'Model>(category, key, value) =
     member __.Key: string = key
     member __.Value: obj = value
 
-type VueComputed<'T, 'Model>(name: string, compute: 'Model->'T) =
-    inherit VueExtra<'Model>("computed", name, compute)
-
 type IVueComponent =
     interface end
 
+type VueComputed<'T, 'Model>(name: string, compute: 'Model->'T) =
+    inherit VueExtra<'Model>("computed", name, compute)
+
+type VueComponents<'T>(values: seq<string * IVueComponent>) = 
+    inherit VueExtra<'T>("components", "values", values)
+
+type VueTemplate<'T>(template: string) = 
+    inherit VueExtra<'T>("template", "template", template) 
+let computed name (compute: 'Model -> 'T) = 
+    VueComputed(name, compute)
+
+let components (values: seq<string * IVueComponent>) = 
+    VueComponents<'T>(values)
+
+let template (content: string) = 
+    VueTemplate<'T>(content)
+     
 module internal Internal =
     open System
     open FSharp.Reflection
@@ -34,7 +48,6 @@ module internal Internal =
     let mkComponent<'Model, 'Msg>
             (modelType: Type)
             (msgType: Type)
-            (template: string)
             (init: unit -> 'Model)
             (update: 'Model -> 'Msg -> 'Model)
             (extra: VueExtra<'Model> seq) =
@@ -56,28 +69,45 @@ module internal Internal =
                 FSharpValue.MakeUnion(msgCase, values))
 
         let computed = obj()
+        let childComponents = obj() 
+
+        let mutable template = "<template></template>"
+
         for kv in extra do
             if kv.Category = "computed" then
                 computed?(kv.Key) <- fun () ->
                     kv.Value $ (mkModel jsThis)
 
+            if kv.Category = "template" then
+                template <- unbox<string> kv.Value
+
+            if kv.Category = "components" then
+                for (name, child) in unbox<seq<string * IVueComponent>> kv.Value do
+                    childComponents?(name) <- child
+        
         // TODO: Mark all record fields as props or let/make user select them?
         createObj [
             "data" ==> init
-            "template" ==> template
             "methods" ==> methodsObj
+            "template" ==> template
             "computed" ==> computed
+            "components" ==> childComponents
         ] :?> IVueComponent
 
 let inline componentBuilder<'Model, 'Msg>
-                (template: string)
                 (init: unit -> 'Model)
                 (update: 'Model -> 'Msg -> 'Model)
                 (extra: VueExtra<'Model> seq) =
-    Internal.mkComponent typeof<'Model> typeof<'Msg> template init update extra
+    Internal.mkComponent typeof<'Model> typeof<'Msg> init update extra
+
 
 let registerComponent (name: string) (component': IVueComponent): unit =
     Vue?``component``(name, component')
 
-let mountApp (elSelector: string): unit =
-    createNew Vue (createObj["el" ==> elSelector]) |> ignore
+let mountApp (elSelector: string) (app: IVueComponent): unit =
+    let props = createObj [
+        "el" ==> elSelector
+        "render" ==> fun create -> create app
+    ]
+    
+    createNew Vue props |> ignore

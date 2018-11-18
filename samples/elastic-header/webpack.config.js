@@ -4,7 +4,7 @@ function resolve(x) {
 }
 
 module.exports = {
-  entry: resolve("./src/App.fsproj"),
+  entry: resolve("./src/ElasticHeader.fsproj"),
   output: {
     path: resolve("public"),
     filename: "bundle.js"
@@ -17,8 +17,11 @@ module.exports = {
   devtool: "eval-source-map",
   module: {
     rules: [{
-        test: /\.fs(x|proj)?$/,
-        use: "fable-loader"
+      test: /\.fs(x|proj)?$/,
+      use: "fable-loader"
+    }, {
+      test: /\.html$/, 
+      use: "raw-loader"
     }]
   }
 };

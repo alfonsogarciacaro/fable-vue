@@ -5,6 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="DraggableHeader.fs" />
     <Compile Include="App.fs" />
   </ItemGroup>
 
@@ -14,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\Fable.Vue.fsproj" />
+    <ProjectReference Include="..\..\..\src\Fable.VueJs.fsproj" />
   </ItemGroup>
 
 </Project>
