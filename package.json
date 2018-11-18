@@ -1,0 +1,15 @@
+{
+  "private": true,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "webpack-dev-server --config samples/elastic-header/webpack.config.js"
+  },
+  "dependencies": {
+    "@babel/core": "^7.1.6",
+    "fable-loader": "^2.1.0-beta-003",
+    "vue": "^2.5.17",
+    "webpack": "^4.25.1",
+    "webpack-cli": "^3.1.2",
+    "webpack-dev-server": "^3.1.10"
+  }
+}
