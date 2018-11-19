@@ -28,11 +28,17 @@ type VueComponents<'T>(values: seq<string * IVueComponent>) =
 type VueTemplate<'T>(template: string) =
     inherit VueExtra<'T>("template", "template", template)
 
+type VueName<'T>(name: string) =
+    inherit VueExtra<'T>("name", "name", name)
+
 let computed name (compute: 'Model -> 'T) =
     VueComputed(name, compute)
 
 let components (values: seq<string * IVueComponent>) =
     VueComponents<'T>(values)
+
+let name value = 
+    VueName(value)
 
 let template (content: string) =
     VueTemplate<'T>(content)
@@ -81,7 +87,7 @@ module internal Internal =
                 let values = if hasFields then values else [||]
                 FSharpValue.MakeUnion(msgCase, values))
 
-        let mutable template = "<template></template>"
+        let mutable template = "<div></div>"
 
         for kv in extra do
             if kv.Category = "computed" then
@@ -114,27 +120,36 @@ let inline componentBuilder
 let registerComponent (name: string) (component': IVueComponent): unit =
     Vue?``component``(name, component')
 
-let mountApp (elSelector: string) (extra: VueExtra<'Model> seq): unit =
-    let childComponents = obj()
-    let mutable template = "<template></template>"
 
+let stateless (extra: seq<VueExtra<'T>>) = 
+    let childComponents = obj()
+    let mutable template : Option<string> = None
+    let mutable name : Option<string> = None
     for kv in extra do
         if kv.Category = "template" then
-            template <- unbox<string> kv.Value
+            template <- Some (unbox<string> kv.Value)
 
         if kv.Category = "components" then
             for (name, child) in unbox<seq<string * IVueComponent>> kv.Value do
                 childComponents?(name) <- child
-
-    let app = createObj [
-        "name" ==> "App"
-        "template" ==> template
+        
+        if kv.Category = "name" then 
+            name <- Some (unbox<string> kv.Value)
+    
+    let props = createObj [
+        "name" ==> defaultArg name "Stateless" 
+        "template" ==> defaultArg template "<div></div>"
         "components" ==> childComponents
     ]
+
+    props :?> IVueComponent
+
+let mountApp (elSelector: string) (app: IVueComponent): unit =
 
     let props = createObj [
         "el" ==> elSelector
         "render" ==> fun create -> create app
     ]
 
-    createNew Vue props |> ignore
+    createNew Vue props
+    |> ignore
