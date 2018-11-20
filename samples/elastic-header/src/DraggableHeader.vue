@@ -16,7 +16,7 @@
     </div>
 </template>
 
-<script src="../src/DraggableHeader.fs"></script>
+<script src="./DraggableHeader.fs"></script>
 
 <style></style>
 

@@ -1,7 +1,7 @@
-export function mkMethod(update, mkProps, mkModel, mkMsg) {
+export function mkMethod(update, mkVueProxy, mkModel, mkMsg) {
     return function () {
         const oldModel = mkModel(this);
-        const newModel = update(this, mkProps(this), oldModel, mkMsg(arguments));
+        const newModel = update(mkVueProxy(this), oldModel, mkMsg(arguments));
         if (newModel !== oldModel) {
             for (const key of Object.keys(newModel)) {
                 if (newModel[key] !== oldModel[key]) {

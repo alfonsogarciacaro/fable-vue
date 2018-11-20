@@ -4,9 +4,21 @@ open Fable.Core
 open Fable.Core.JsInterop
 open Fable.Import
 
-let [<Global>] dynamics: obj = jsNative
-
 type Point = { x: float; y: float }
+
+type IDynamics =
+    abstract animate: Point * Point * obj -> unit
+    abstract spring: obj
+    abstract bounce: obj
+    abstract forceWithGravity: obj
+    abstract gravity: obj
+    abstract easeInOut: obj
+    abstract easeIn: obj
+    abstract easeOut: obj
+    abstract linear: obj
+    abstract bezier: obj
+
+let [<Global>] dynamics: IDynamics = jsNative
 
 type Props =
     { title: string }
@@ -35,7 +47,10 @@ type Msg =
     | OnDrag of Browser.MouseEvent
     | StopDrag
 
-let update _vue (_props: Props) state = function
+/// Small helper to create plain JS objects
+let inline pojo x = createObj x
+
+let update (_vue: Vue.IVue<Props>) state = function
     | StartDrag e ->
         { state with dragging = true
                      start = getPage e }
@@ -49,8 +64,8 @@ let update _vue (_props: Props) state = function
         let y = 160. + dy / dampen
         { state with current = { x = x; y = y } }
     | StopDrag when state.dragging ->
-        dynamics?animate(state.current, {x=160.; y=160.}, createObj [
-                "type" ==> dynamics?spring
+        dynamics.animate(state.current, {x=160.; y=160.}, pojo [
+                "type" ==> dynamics.spring
                 "duration" ==> 700
                 "friction" ==> 280
             ])
@@ -63,13 +78,11 @@ let headerPath model =
 let contentPosition model =
     let dy = model.current.x - 160.
     let dampen = if dy > 0. then 2. else 4.
-    createObj [
+    pojo [
         "transform" ==> "translate3d(0," + string(dy/dampen) + "px,0)"
     ]
 
-let draggableHeader = Vue.componentBuilder init update [
-    Vue.computed "headerPath" headerPath
-    Vue.computed "contentPosition" contentPosition
-]
-
-Vue.exportDefault draggableHeader
+Vue.componentBuilder init update [
+    Vue.computed (nameof2 headerPath)
+    Vue.computed (nameof2 contentPosition)
+] |> exportDefault
