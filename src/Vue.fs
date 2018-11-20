@@ -8,7 +8,7 @@ open Fable.Core.JsInterop
 let private Vue: obj = jsNative
 
 [<AbstractClass>]
-type VueExtra<'Model>(category, key, value) =
+type VueExtra(category, key, value) =
     member __.Category: string = category
     member __.Key: string = key
     member __.Value: obj = value
@@ -20,28 +20,28 @@ type IVue =
     interface end
 
 type VueComputed<'T, 'Model>(name: string, compute: 'Model->'T) =
-    inherit VueExtra<'Model>("computed", name, compute)
+    inherit VueExtra("computed", name, compute)
 
-type VueComponents<'T>(values: seq<string * IVueComponent>) =
-    inherit VueExtra<'T>("components", "values", values)
+type VueComponents(values: seq<string * IVueComponent>) =
+    inherit VueExtra("components", "values", values)
 
-type VueTemplate<'T>(template: string) =
-    inherit VueExtra<'T>("template", "template", template)
+type VueTemplate(template: string) =
+    inherit VueExtra("template", "template", template)
 
-type VueName<'T>(name: string) =
-    inherit VueExtra<'T>("name", "name", name)
+type VueName(name: string) =
+    inherit VueExtra("name", "name", name)
 
 let computed name (compute: 'Model -> 'T) =
     VueComputed(name, compute)
 
 let components (values: seq<string * IVueComponent>) =
-    VueComponents<'T>(values)
+    VueComponents(values)
 
-let name value = 
+let name value =
     VueName(value)
 
 let template (content: string) =
-    VueTemplate<'T>(content)
+    VueTemplate(content)
 
 module internal Internal =
     open System
@@ -60,7 +60,7 @@ module internal Internal =
                     (msgType: Type)
                     (init: unit -> 'Model)
                     (update: IVue -> 'Props -> 'Model -> 'Msg -> 'Model)
-                    (extra: VueExtra<'Model> seq) =
+                    (extra: VueExtra seq) =
 
         let mkMakeRecordFn typ =
             let fields = FSharpType.GetRecordFields typ
@@ -114,14 +114,14 @@ module internal Internal =
 let inline componentBuilder
                 (init: unit -> 'Model)
                 (update: IVue -> 'Props -> 'Model -> 'Msg -> 'Model)
-                (extra: VueExtra<'Model> seq) =
+                (extra: VueExtra seq) =
     Internal.mkComponent typeof<'Props> typeof<'Model> typeof<'Msg> init update extra
 
 let registerComponent (name: string) (component': IVueComponent): unit =
     Vue?``component``(name, component')
 
 
-let stateless (extra: seq<VueExtra<'T>>) = 
+let stateless (extra: VueExtra seq) =
     let childComponents = obj()
     let mutable template : Option<string> = None
     let mutable name : Option<string> = None
@@ -132,12 +132,12 @@ let stateless (extra: seq<VueExtra<'T>>) =
         if kv.Category = "components" then
             for (name, child) in unbox<seq<string * IVueComponent>> kv.Value do
                 childComponents?(name) <- child
-        
-        if kv.Category = "name" then 
+
+        if kv.Category = "name" then
             name <- Some (unbox<string> kv.Value)
-    
+
     let props = createObj [
-        "name" ==> defaultArg name "Stateless" 
+        "name" ==> defaultArg name "Stateless"
         "template" ==> defaultArg template "<div></div>"
         "components" ==> childComponents
     ]
@@ -153,3 +153,6 @@ let mountApp (elSelector: string) (app: IVueComponent): unit =
 
     createNew Vue props
     |> ignore
+
+[<Emit("export default $0")>]
+let exportDefault (x: obj): unit = jsNative

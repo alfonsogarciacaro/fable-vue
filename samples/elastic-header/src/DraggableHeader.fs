@@ -70,5 +70,6 @@ let contentPosition model =
 let draggableHeader = Vue.componentBuilder init update [
     Vue.computed "headerPath" headerPath
     Vue.computed "contentPosition" contentPosition
-    Vue.template (importAll "./DraggableHeader.html")
 ]
+
+Vue.exportDefault draggableHeader

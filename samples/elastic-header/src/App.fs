@@ -4,9 +4,9 @@ open Fable.Core.JsInterop
 
 let app = Vue.stateless [
     Vue.name "App"
-    Vue.template (importAll "./App.html")
+    Vue.template (importDefault "./App.html")
     Vue.components [
-        "draggable-header-view", DraggableHeader.draggableHeader
+        "draggable-header-view", importDefault "../components/DraggableHeader.vue"
     ]
 ]
 
