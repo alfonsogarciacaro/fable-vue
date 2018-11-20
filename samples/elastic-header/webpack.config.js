@@ -6,7 +6,7 @@ function resolve(x) {
 }
 
 module.exports = {
-  entry: resolve("./src/ElasticHeader.fsproj"),
+  entry: resolve("src"),
   output: {
     path: resolve("public"),
     filename: "bundle.js"
@@ -22,10 +22,6 @@ module.exports = {
       {
         test: /\.fs(x|proj)?$/,
         use: "fable-loader"
-      },
-      {
-        test: /\.html$/,
-        use: "raw-loader"
       },
       {
         test: /\.vue$/,
