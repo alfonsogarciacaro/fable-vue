@@ -1,4 +1,6 @@
 const path = require("path");
+const VueLoaderPlugin = require('vue-loader/lib/plugin')
+
 function resolve(x) {
   return path.join(__dirname, x);
 }
@@ -16,12 +18,29 @@ module.exports = {
   mode: "development",
   devtool: "eval-source-map",
   module: {
-    rules: [{
-      test: /\.fs(x|proj)?$/,
-      use: "fable-loader"
-    }, {
-      test: /\.html$/, 
-      use: "raw-loader"
-    }]
-  }
+    rules: [
+      {
+        test: /\.fs(x|proj)?$/,
+        use: "fable-loader"
+      },
+      {
+        test: /\.html$/,
+        use: "raw-loader"
+      },
+      {
+        test: /\.vue$/,
+        loader: 'vue-loader'
+      },
+      {
+        test: /\.css$/,
+        use: [
+          'vue-style-loader',
+          'css-loader'
+        ]
+      }
+    ]
+  },
+  plugins: [
+    new VueLoaderPlugin()
+  ]
 };
