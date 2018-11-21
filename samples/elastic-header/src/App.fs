@@ -1,8 +1,9 @@
 module App
 
+open Vue
 open Fable.Core.JsInterop
 
-Vue.stateless [
-    Vue.name "App"
-    Vue.importComponent "DraggableHeader"
-] |> exportDefault
+makeComponent
+|> withName "App"
+|> withComponent "DraggableHeader"
+|> exportDefault

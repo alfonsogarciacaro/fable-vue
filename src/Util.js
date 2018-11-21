@@ -1,12 +1,22 @@
-export function mkMethod(update, mkVueProxy, mkModel, mkMsg) {
-    return function () {
-        const oldModel = mkModel(this);
-        const newModel = update(mkVueProxy(this), oldModel, mkMsg(arguments));
-        if (newModel !== oldModel) {
+function nestedUpdate(oldModelParent, oldModelKey, newModel) {
+    const oldModel = oldModelParent[oldModelKey];
+    if (oldModel !== newModel) {
+        if (typeof newModel === "object" && !(Symbol.iterator in newModel)) {
             for (const key of Object.keys(newModel)) {
-                if (newModel[key] !== oldModel[key]) {
-                    this[key] = newModel[key];
-                }
+                nestedUpdate(oldModel, key, newModel[key]);
+            }
+        } else {
+            oldModelParent[oldModelKey] = newModel;
+        }
+    }
+}
+
+export function mkMethod(update, mkMsg) {
+    return function () {
+        const newModel = update(this, this, mkMsg(arguments));
+        if (this !== newModel) {
+            for (const key of Object.keys(newModel)) {
+                nestedUpdate(this, key, newModel[key]);
             }
         }
     }
