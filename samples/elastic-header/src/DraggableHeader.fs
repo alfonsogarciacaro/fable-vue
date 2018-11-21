@@ -1,24 +1,13 @@
 module DraggableHeader
 
+open Vue
 open Fable.Core
 open Fable.Core.JsInterop
 open Fable.Import
 
-type Point = { x: float; y: float }
-
-type IDynamics =
-    abstract animate: Point * Point * obj -> unit
-    abstract spring: obj
-    abstract bounce: obj
-    abstract forceWithGravity: obj
-    abstract gravity: obj
-    abstract easeInOut: obj
-    abstract easeIn: obj
-    abstract easeOut: obj
-    abstract linear: obj
-    abstract bezier: obj
-
-let [<Global>] dynamics: IDynamics = jsNative
+type Point =
+    { x: float
+      y: float }
 
 type Props =
     { title: string }
@@ -28,13 +17,24 @@ type Model =
       current: Point
       start: Point }
 
+type Msg =
+    | StartDrag of Browser.MouseEvent
+    | OnDrag of Browser.MouseEvent
+    | StopDrag
+
+type IDynamics =
+    abstract animate: Point * Point * obj -> unit
+    abstract spring: obj
+
+let [<Global>] dynamics: IDynamics = jsNative
+
 let init () =
     { dragging = false
       current = { x=160.; y=160. }
       start = { x=0.; y=0. } }
 
+/// Checks if this is a touch event
 let getPage (e: Browser.MouseEvent) =
-    // Check if this is a touch event
     let te = e :?> Browser.TouchEvent
     if not(isNull te.changedTouches) then
         let te = te.changedTouches.[0]
@@ -42,15 +42,10 @@ let getPage (e: Browser.MouseEvent) =
     else
         { x = e.pageX; y = e.pageY }
 
-type Msg =
-    | StartDrag of Browser.MouseEvent
-    | OnDrag of Browser.MouseEvent
-    | StopDrag
-
 /// Small helper to create plain JS objects
 let inline pojo x = createObj x
 
-let update (_vue: Vue.IVue<Props>) state = function
+let update _ state = function
     | StartDrag e ->
         { state with dragging = true
                      start = getPage e }
@@ -65,24 +60,27 @@ let update (_vue: Vue.IVue<Props>) state = function
         { state with current = { x = x; y = y } }
     | StopDrag when state.dragging ->
         dynamics.animate(state.current, {x=160.; y=160.}, pojo [
-                "type" ==> dynamics.spring
-                "duration" ==> 700
-                "friction" ==> 280
-            ])
+            "type" ==> dynamics.spring
+            "duration" ==> 700
+            "friction" ==> 280
+        ])
         { state with dragging = false }
     | OnDrag _ | StopDrag -> state
 
-let headerPath model =
-    "M0,0 L320,0 320,160Q" + string model.current.x + "," + string model.current.y + " 0,160"
+let headerPath vue =
+    let state = state vue: Model
+    "M0,0 L320,0 320,160Q" + string state.current.x + "," + string state.current.y + " 0,160"
 
-let contentPosition model =
-    let dy = model.current.x - 160.
+let contentPosition vue =
+    let dy = (state vue: Model).current.x - 160.
     let dampen = if dy > 0. then 2. else 4.
     pojo [
         "transform" ==> "translate3d(0," + string(dy/dampen) + "px,0)"
     ]
 
-Vue.componentBuilder init update [
-    Vue.computed (nameof2 headerPath)
-    Vue.computed (nameof2 contentPosition)
-] |> exportDefault
+makeComponent
+|> withState init update
+|> withProps (fun p -> p: Props)
+|> withComputed (nameof2 headerPath)
+|> withComputed (nameof2 contentPosition)
+|> exportDefault

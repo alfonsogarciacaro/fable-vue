@@ -4,181 +4,139 @@ open Fable.Core
 open Fable.Import
 open Fable.Core.JsInterop
 
-[<Import("default", from="vue/dist/vue.esm.js")>]
-let private Vue: obj = jsNative
+type Any = obj
+type NotSet = interface end
 
-[<AbstractClass>]
-type VueExtra(category, key, value) =
-    member __.Category: string = category
-    member __.Key: string = key
-    member __.Value: obj = value
+type Store<'Getters,'State,'Msg> =
+    [<Emit("$0.getters")>]
+    abstract Getters: 'Getters
 
-type IVueComponent =
-    interface end
+type Component<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg> =
+    [<Emit("$0")>]
+    abstract State: 'State
+    [<Emit("$0")>]
+    abstract Props: 'Props
+    [<Emit("$0.$store")>]
+    abstract Store: Store<'StoreGetters,'StoreState,'StoreMsg>
 
-type IVue<'Props> =
-    abstract props: 'Props
+type Update<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg> =
+    Component<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg> -> 'State -> 'Msg -> 'State
 
-type private VueProxy<'Props>(vue: obj, mkProps: obj->obj) =
-    let mutable propsCache: 'Props option = None
-    interface IVue<'Props> with
-        member __.props =
-            match propsCache with
-            | Some props -> props
-            | None ->
-                let props = mkProps(vue) :?> 'Props
-                propsCache <- Some props
-                props
+let private Vue: obj = importDefault "vue"
+let private mkMethod
+        (update: Update<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg>)
+        (mkMsg: obj[]->obj): obj = importMember "./Util"
 
-type VueExtras(values: VueExtra list) =
-    inherit VueExtra("extras", "extras", values)
+// Helpers to access Component fields without type annotations
 
-type VueComputed<'T, 'Model>(name: string, compute: 'Model->'T) =
-    inherit VueExtra("computed", name, compute)
+let inline state (vueComponent: Component<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg>) =
+    vueComponent.State
 
-type VueComponent(name: string, value: IVueComponent) =
-    inherit VueExtra("components", name, value)
+let inline props (vueComponent: Component<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg>) =
+    vueComponent.Props
 
-type VueTemplate(template: string) =
-    inherit VueExtra("template", "template", template)
+let inline store (vueComponent: Component<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg>) =
+    vueComponent.Store
 
-type VueName(name: string) =
-    inherit VueExtra("name", "name", name)
-
-let computed (name, compute: 'Model -> 'T) =
-    VueComputed(name, compute)
-
-let components (values: seq<string * IVueComponent>) =
-    values |> Seq.map (fun v -> VueComponent v :> VueExtra) |> Seq.toList |> VueExtras
-
-let inline importComponent name =
-    VueComponent(name, importDefault ("./" + name + ".vue"))
-
-let name value =
-    VueName(value)
-
-let template (content: string) =
-    VueTemplate(content)
-
-module internal Internal =
+module internal Util =
     open System
     open FSharp.Reflection
+    open Fable.Core.JsInterop
+    open Fable.Core.DynamicExtensions
+    open Fable.Import
 
-    let mkMethod (update: IVue<'Props> -> 'Model -> 'Msg -> 'Model)
-                 (mkVueProxy: obj -> obj)
-                 (mkModel: obj -> obj)
-                 (mkMsg: obj[] -> obj): obj = importMember "./Util"
+    let (~%) kvs = createObj kvs
 
     let lowerFirst (str: string) =
         str.[0].ToString().ToLower() + str.[1..]
 
-    type ExtraAccumulator =
-        { components: obj
-          name: string
-          template: string
-          other: Map<string, obj> }
-        static member Empty =
-            { components = obj()
-              name = ""
-              template = ""
-              other = Map.empty }
+    let addKeyValue (key: string) (value: obj) (o: 'T): 'T =
+        o.[key] <- value; o
 
-    let addKeyValue k v (o: obj) =
-        o?(k) <- v; o
+    let addSubKeyValue (sub: string) (key: string) (value: obj) (o: 'T): 'T =
+        if isNull o.[sub]
+        then o.[sub] <- %[key ==> value]; o
+        else o.[sub].[key] <- value; o
 
-    let rec resolveExtras f (acc: ExtraAccumulator) (extra: VueExtra seq) =
-        (acc, extra) ||> Seq.fold (fun acc kv ->
-            match kv.Category with
-            | "extras" -> resolveExtras f acc !!kv.Value
-            | "name" -> { acc with name = !!kv.Value }
-            | "template"-> { acc with template = !!kv.Value }
-            | "components" -> { acc with components = addKeyValue kv.Key kv.Value acc.components }
-            | category -> f acc kv category)
+    let addState
+            (msgType: Type)
+            (init: unit->'Model)
+            (update: Update<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg>)
+            (vueComponent: Component<'StoreGetters,'StoreState,'StoreMsg,'Props,NotSet,NotSet>) =
+        let methodsObj =
+            (obj(), FSharpType.GetUnionCases msgType) ||> Array.fold (fun acc msgCase ->
+                let hasFields = msgCase.GetFields().Length > 0
+                let mkMsg values =
+                    let values = if hasFields then values else [||]
+                    FSharpValue.MakeUnion(msgCase, values)
+                 // Lower first letter to follow standards
+                addKeyValue (lowerFirst msgCase.Name) (mkMethod update mkMsg) acc
+            )
+        JS.Object.assign(vueComponent, %[
+            "data" ==> init
+            "methods" ==> methodsObj
+        ])
 
-    let addExtra key (value: obj) =
-        match value with
-        | :? string as v -> if String.IsNullOrEmpty v then None else Some(key ==> v)
-        | :? (obj array) as v -> if v.Length = 0 then None else Some(key ==> v)
-        | v -> if JS.Object.keys(v).Count = 0 then None else Some(key ==> v)
+    // TODO: Add prop types, see https://vuejs.org/v2/guide/components-props.html#Prop-Types
+    let addProps (propsType: Type) vueComponent =
+        let props = FSharpType.GetRecordFields propsType
+        JS.Object.assign(vueComponent, %[
+            "props" ==> (props |> Array.map (fun p -> p.Name))
+        ])
 
-    let mkComponent (propsType: Type)
-                    (modelType: Type)
-                    (msgType: Type)
-                    (init: unit -> 'Model)
-                    (update: IVue<'Props> -> 'Model -> 'Msg -> 'Model)
-                    (extra: VueExtra seq) =
+let inline makeComponent<'T> =
+    obj() :?> Component<NotSet,NotSet,NotSet,NotSet,NotSet,NotSet>
 
-        let mkMakeRecordFn (typ: Type) =
-            if typ.FullName = typeof<obj>.FullName
-            then [||], Unchecked.defaultof<_>
-            else
-                let fields = FSharpType.GetRecordFields typ
-                let fieldsDic = fields |> Array.mapi (fun i fi -> fi.Name, i) |> dict
-                fields, fun (fieldObj: obj)  ->
-                    let values = Array.zeroCreate fields.Length
-                    for (KeyValue(k, i)) in fieldsDic do
-                        values.[i] <- fieldObj?(k)
-                    FSharpValue.MakeRecord(typ, values)
+let withName
+        (name: string)
+        (vueComponent: Component<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg>) =
+    vueComponent |> Util.addKeyValue "name" name
 
-        let props, mkProps = mkMakeRecordFn propsType
-        let _, mkModel = mkMakeRecordFn modelType
+let inline withState
+        (init: unit->'Model)
+        (update: Update<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg>)
+        (vueComponent: Component<'StoreGetters,'StoreState,'StoreMsg,'Props,NotSet,NotSet>) =
+    vueComponent
+    |> Util.addState typeof<'Msg> init update
+    :?> Component<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg>
 
-        let methodsObj = obj()
-        for msgCase in FSharpType.GetUnionCases msgType do
-            // REVIEW: Lowering first letter to follow Vue.js standards for methods
-            let k = lowerFirst msgCase.Name
-            let hasFields = msgCase.GetFields().Length > 0
-            methodsObj?(k) <- mkMethod update (fun v -> upcast VueProxy(v, mkProps)) mkModel (fun values ->
-                let values = if hasFields then values else [||]
-                FSharpValue.MakeUnion(msgCase, values))
+// let withStore
+//     (storeDeclaration: 'StoreGetters * 'StoreState * 'StoreMsg -> unit)
+//     (vueComponent: Component<'StoreGetters,'StoreState,'StoreMsg,NotSet,'State,'Msg>) =
+//     vueComponent :?> Component<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg>
 
-        let extra =
-            ({ ExtraAccumulator.Empty with other = Map ["computed", obj()] }, extra)
-            ||> resolveExtras (fun acc e -> function
-                | "computed" ->
-                    let computed = acc.other.["computed"] |> addKeyValue e.Key (fun () ->
-                        e.Value $ (mkModel jsThis))
-                    { acc with other = Map.add "computed" computed acc.other }
-                | _ -> acc)
+let inline withProps
+    (idProps: 'Props->'Props)
+    (vueComponent: Component<'StoreGetters,'StoreState,'StoreMsg,NotSet,'State,'Msg>) =
+    vueComponent
+    |> Util.addProps typeof<'Props>
+    :?> Component<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg>
 
-        [
-            Some("data" ==> init)
-            Some("methods" ==> methodsObj)
-            addExtra "computed" extra.other.["computed"]
-            // TODO: Add prop types, see https://vuejs.org/v2/guide/components-props.html#Prop-Types
-            addExtra "props" (props |> Array.map (fun p -> p.Name))
-            addExtra "name" extra.name
-            addExtra "template" extra.template
-            addExtra "components" extra.components
-        ]
-        |> List.choose id |> createObj :?> IVueComponent
+let withComputed
+        (name: string, f: Component<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg> -> 'T)
+        (vueComponent: Component<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg>) =
+    vueComponent |> Util.addSubKeyValue "computed" name (fun () -> f jsThis)
 
-let inline componentBuilder
-                (init: unit -> 'Model)
-                (update: IVue<'Props> -> 'Model -> 'Msg -> 'Model)
-                (extra: VueExtra seq) =
-    Internal.mkComponent typeof<'Props> typeof<'Model> typeof<'Msg> init update extra
+let internal withComponentInternal
+        (name: string)
+        (importedComponent: obj)
+        (vueComponent: Component<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg>) =
+    vueComponent |> Util.addSubKeyValue "components" name importedComponent
 
-let registerComponent (name: string) (component': IVueComponent): unit =
-    Vue?``component``(name, component')
+let inline withComponentFrom
+        (dir: string)
+        (name: string)
+        (vueComponent: Component<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg>) =
+    withComponentInternal name (importDefault (dir + "/" + name + ".vue")) vueComponent
 
-let stateless (extra: VueExtra seq) =
-    let extra =
-        (Internal.ExtraAccumulator.Empty, extra)
-        ||> Internal.resolveExtras (fun acc _ _ -> acc)
-    [
-        Internal.addExtra "name" extra.name
-        Internal.addExtra "template" extra.template
-        Internal.addExtra "components" extra.components
-    ]
-    |> List.choose id |> createObj :?> IVueComponent
+let inline withComponent
+        (name: string)
+        (vueComponent: Component<'StoreGetters,'StoreState,'StoreMsg,'Props,'State,'Msg>) =
+    withComponentInternal name (importDefault ("./" + name + ".vue")) vueComponent
 
-let mountApp (elSelector: string) (app: IVueComponent): unit =
-
+let mountApp (elSelector: string) (app: Component<_,_,_,_,_,_>): unit =
     let props = createObj [
         "el" ==> elSelector
         "render" ==> fun create -> create app
     ]
-
-    createNew Vue props
-    |> ignore
+    createNew Vue props |> ignore
