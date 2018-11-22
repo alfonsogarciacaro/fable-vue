@@ -7,8 +7,8 @@
   "dependencies": {
     "@babel/core": "^7.1.6",
     "css-loader": "^1.0.1",
-    "fable-compiler-dotnet": "^2.1.0-beta-002",
-    "fable-loader": "^2.1.0-beta-005",
+    "fable-compiler": "^2.1.0-beta-003",
+    "fable-loader": "^2.1.0-beta-006",
     "vue": "^2.5.17",
     "vue-loader": "^15.4.2",
     "vue-template-compiler": "^2.5.17",
